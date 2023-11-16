@@ -1,0 +1,517 @@
+---
+title: "Correcting inferences through density ratio estimation"
+author: "Thom Benjamin Volker"
+format: 
+  revealjs:
+    slide-number: true
+    df-print: kable
+---
+
+```{r}
+#| include: false
+library(ggplot2)
+library(densityratio)
+```
+
+## Imagine ...
+
+![Getty Images](files/segregation.jpg)
+
+::: {.notes}
+
+- You're a researcher, researching segregation
+- In collaboration with a national statistical institute, like Statistics Netherlands, you've collected data
+- Data contains demographical information: age, gender, income, ethnicity
+- But also where you live, how long you live there, and with whom
+- Name up to five people who are important in your life + their demographic characteristics.
+
+- This data is useful for your own research, but can be used broadly by other researchers
+- They can answer their own research questions, replication purposes, learn from your data analysis, test new complex models, use the data in research
+- But the core issue obviously is how this data can be shared...
+
+
+:::
+
+# Open data? Preferably not...
+
+But maybe synthetic data?
+
+::: {.notes}
+
+- The idea is that synthetic data is almost as useful as the original, and can be used for similar purposes, but contains almost no privacy risks.
+- The synthetic data can be seen as an alternative sample from the same population, consisting of different, imaginary individuals, who are, as a group, nearly indistinguishable from the original participants.
+
+:::
+
+# Synthetic data
+
+_Fake data, generated data, simulated data, digital twins_
+
+::: {.notes}
+In contrast to real, collected data, produced by complex phenomena.
+:::
+
+# Synthetic data: How to?
+
+## Prerequisites
+
+- A dataset to synthesize
+
+- A generative model
+
+::: aside
+
+That's all
+
+:::
+
+::: {.notes}
+The question that follows logically is, how can we actually create such synthetic data.
+The recipe for a synthetic data set is quite simple: you need a dataset that you want to synthesize, and a generative model. You will probably have the data already, so let's move to the generative models.
+:::
+
+## Generative models
+
+$$p(\boldsymbol{X} | \theta)$$
+
+- A model $p$ for the data $\boldsymbol{X}$;
+
+- With parameters $\theta$;
+
+- Estimated from the real data.
+
+::: {.callout-tip title="Definition"}
+
+Generative models learn the distribution of the data $\boldsymbol{X}$ given the parameters $\theta$.
+
+::: 
+
+## Examples of generative models
+
+A normal distribution with parameters $\theta = \{\mu, \sigma\}$.
+
+- In `R`: `rnorm(n = 100, mean = 1, sd = 2)`
+
+A histogram with bins and proportions.
+
+Sequential regression models for a multivariate distribution (with coefficients and (co-)variance terms).
+
+A neural network with thousands of parameters.
+
+## [Generative models: Sequential regression]{.r-fit-text}
+
+MICE: Multiple Imputation by __Chained Equations__
+
+We can create a multivariate generative model through a series of univariate prediction models.
+
+$$p(X_1, X_2, X_3) = p(X_1 | X_2, X_3) p(X_2 | X_1, X_3) p(X_3 | X_1, X_2)$$
+
+To this end, we can use univariate predictionmodels (linear regression, tree-based models)!
+
+Prediction models are allowed to differ per variable.
+
+As long as we factor in the uncertainty around the predictions.
+
+::: {.notes}
+If we want to synthesize multiple variables, we can combine multiple regression models. 
+This approach is very similar to multiple imputation for missing data, but rather than imputing the missings, with overwrite the existing values.
+:::
+
+
+## Practically
+
+1. Estimate $p(X_1 | X_2, X_3)$, 
+
+2. Generate synthetic $X_1^{*}$ given the observed $X_2$ en $X_3$,
+
+3. Estimate $p(X_2 | X_1, X_3)$,
+
+4. Generate synthetic $X_2^{*}$ given synthetic $X_1^{*}$ and observed $X_3$,
+
+5. Estimate $p(X_3 | X_1, X_2)$,
+
+6. Generate synthetic $X_3{*}$ given synthetic $X_1^{*}$ en $X_2^{*}$.
+
+# Generating synthetic data is easy
+
+But generating high-quality synthetic data is hard!
+
+## Synthetic data in practice
+
+1. Start simple
+
+2. Evaluate the quality of the synthetic data
+
+3. Add complexity where necessary (transformations, interactions, non-linearities)
+
+4. Iterate between (2.) and (3.) until the synthetic data has sufficient quality
+
+::: aside
+
+The focus is here mainly on the utility side, and ignores the privacy requirements. Generally, privacy risks increase in the complexity of the generative models.
+
+:::
+
+# Evaluating the quality of synthetic data
+
+##
+
+### Intuitively
+
+- Are the synthetic and observed data distributions similar?
+
+- Can we use the synthetic data for similar purposes as the observed data?
+
+### Practically
+
+- Can we distinguish between the observed and synthetic data?
+
+- Are results from analyses on the synthetic and observed data similar?
+
+# Synthetic data quality depends on what it is used for
+
+But typically, we don't know what it will be used for
+
+## 
+
+__When the synthetic and observed data have a similar distribution, they should provide similar results.__
+
+```{r}
+ggplot() +
+  stat_function(fun = dnorm, args = list(mean = 1, sd = 1),
+                col = "lightblue", linewidth = 1, linetype = 1) +
+  stat_function(fun = dnorm, args = list(mean = 0, sd = sqrt(2)),
+                col = "navy", linewidth = 1, linetype = 4) +
+  theme_void() +
+  xlim(-5, 5) +
+  ylim(0, 0.5) +
+  ylab(NULL)
+```
+
+
+# Evaluating the utility of synthetic data using density ratios
+
+
+$$r(x) = \frac{p(\boldsymbol{X}_{\text{syn }})}{p(\boldsymbol{X}_{obs})}$$
+
+<br>
+*Masashi, Suzuki & Kanamori (2012). Density ratio estimation in machine learning.*
+<br>
+<br>
+
+::: {.notes}
+Laten we even teruggaan naar de observatie dat synthetische data hoge kwaliteit heeft, als de verdeling hetzelfde is als de verdeling van de geobserveerde data, oftewel als we de twee verdelingen niet kunnen onderscheiden.
+Hoe kunnen we dat uitdrukken: als een ratio. Als deze ratio groot is, is er veel synthetische data in een regio waar weinig geobserveerde data is, en als deze klein is, hebben we een regio van de geobserveerde data niet voldoende zwaar gewogen in het genereren van de synthetische data. 
+Dit kan je doen op een univariaat niveau, variabele voor variabele, maar deze ratio kan je ook in een keer schatten voor de multivariate verdelingen van de geobserveerde en gesynthetiseerde data. 
+Deze density ratio zou je natuurlijk kunnen schatten door de kansverdelingen van de gesynthetiseerde en geobserveerde data los van elkaar te schatten, en vervolgens de ratio te nemen. 
+Het nadeel hiervan is dat je schattingsfouten maakt bij beide kansverdelingen, en dat vervolgens de ratio nemen deze schattingsfouten onnodig vergroot. 
+Onderzoek in dit veld heeft aangetoond dat je een nauwkeurigere schatting van de density ratio krijgt door deze direct te schatten. Hoe je dat kan doen kom ik later even op terug.
+::: 
+
+## Density ratios
+
+```{r}
+library(patchwork)
+dlaplace <- function(x, mu = 0, sd = 1) exp(-abs(x-mu)/(sd / sqrt(2))) / (2*(sd / sqrt(2)))
+dratio_lap_norm <- function(x, mu = 0, sd = 1) {
+  dnorm(x, mu, sd) / dlaplace(x, mu, sd)
+}
+
+ggplot() +
+  stat_function(fun = dlaplace, args = list(mu = 0, sd = 1),
+                col = "lightblue", linewidth = 1, linetype = 1) +
+  stat_function(fun = dnorm, args = list(mean = 0, sd = 1),
+                col = "navy", linewidth = 1, linetype = 4) +
+  xlim(-5, 5) +
+  ylim(0, 0.8) +
+  theme_classic() +
+  ylab(NULL) +
+ggplot() +
+  stat_function(fun = dratio_lap_norm, args = list(mu = 0, sd = 1),
+                linewidth = 1, linetype = 1) +
+  xlim(-5, 5) +
+  ylim(0, 2) +
+  theme_classic() +
+  ylab(NULL) +
+ggplot() +
+  stat_function(fun = dnorm, args = list(mean = 0, sd = 1),
+                col = "lightblue", linewidth = 1, linetype = 1) +
+  stat_function(fun = dnorm, args = list(mean = 0, sd = 1),
+                col = "navy", linewidth = 1, linetype = 4) +
+  xlim(-5, 5) +
+  ylim(0, 0.8) +
+  theme_classic() +
+  ylab(NULL) +
+ggplot() +
+  geom_abline(intercept = 1, slope = 0, linewidth = 1, linetype = 1) +
+  theme_classic() +
+  xlim(-5, 5) +
+  ylim(0, 2) +
+  ylab(NULL)
+```
+
+## Density ratios in practice {.smaller}
+
+1. Estimate the density ratio using a non-parametric method
+
+- Unconstrained least-squares importance fitting: $r(\boldsymbol{X}) = \boldsymbol{\psi(X)}\theta$.
+
+- Implemented in `R`-package [`densityratio`](https://github.com/thomvolker/densityratio).
+
+2. Calculate discrepancy measure for synthetic data
+
+- Pearson divergence: $$\hat{\text{PE}}(\boldsymbol{X}_{\text{syn}}, \boldsymbol{X}_{\text{obs}}) = \frac{1}{2n_{\text{syn}}} \sum^{n_{\text{syn}}}_{i=1} r(X^{(i)}_{\text{syn}}) - \frac{1}{n_{\text{obs}}} \sum^{n_{\text{obs}}}_{j=1} r(X^{(j)}_{\text{obs}}) + \frac{1}{2}$$
+
+3. Compare Pearson divergences between different synthetic sets
+
+4. Optionally: Test the null hypothesis $H_0: p(\boldsymbol{X}_{\text{syn}}) = p(\boldsymbol{X}_{\text{obs}})$ using a permutation test.
+
+::: {.notes}
+Hier zie je direct dat de density ratio direct geschat wordt, zonder eerst de losse kansverdelingen te schatten.
+We hebben namelijk een model voor de ratio. Dit is een lineair model, wat relatief eenvoudig is om te schatten.
+Dit lineaire model werkt, omdat we werken met een expansie van de originele data. 
+Psi van X is doorgaans een non-lineaire transformatie van de data, meestal door middel van kernels. 
+Ik wil nu niet echt op de details ingaan, maar in het kort zijn kernels een non-lineaire transformatie, die de originele data uitdrukt als een similariteitsmatrix, met daarin de similariteit van elke observatie ten opzichte van elke andere observatie. 
+Als observaties vergelijkbare waardes op alle variabelen hebben krijgen ze een hoge similariteitsscore, als ze juist ver van elkaar afstaan een lage similariteitsscore.
+:::
+
+## Density ratios for synthetic data (univariate examples)
+
+![](files/densities.png)
+
+::: {.notes}
+Om te kijken hoe goed deze methode werkt hebben we eerst een kleine simulatie met univariate voorbeelden gedaan. 
+Wat je hier zit is denk ik typisch voor het synthetische data veld. We hebben een complexe verdeling van de data, die we benaderen met een relatief simpele normaalverdeling.
+In deze voorbeelden zie je een Laplace verdeling, een locatie-schaal t-verdeling, een lognormale verdeling, en een normale verdeling. Deze verdelingen modelleren we met een normale verdeling die hetzelfde gemiddelde en dezelfde variantie heeft als de echte verdeling.
+In het laatste geval is het synthetische data model dus correct. 
+Vervolgens kijken we hoe goed de geschatte density ratio de ware density ratio benaderd.
+:::
+
+## Density ratios for synthetic data (univariate examples)
+
+![](files/density-ratios.png)
+
+
+
+## Density ratios voor synthetic data (univariate examples)
+
+Power and type I error rate
+
+```{r}
+tibble::tibble(Data = c("Laplace", "Log-normal", "lst", "Normal"),
+               `Density ratio` = c(0.620, 1.000, 0.495, 0.050),
+               `Kolmogorov-Smirnov` = c(0.375, 1.000, 0.235, 0.045),
+               `pMSE` = c(0.610, 1.000, 0.495, 0.040))
+```
+
+## Density ratios for synthetic data (multivariate examples) {.smaller}
+
+### U.S. Current Population Survey (n = 5000)^[Thanks to Jörg Drechsler for sharing the data.]
+
+- Four continuous variables (_age, income, social security payments, household income_)
+- Four categorical variables (_sex, race, marital status, educational attainment_)
+
+### Synthetic data models
+
+(Multinomial) logistic regression for categorical variables
+
+1. Linear regression
+2. Linear regression with transformations (cubic root)
+3. Linear regression with transformations and semi-continuous modelling
+
+::: {.notes}
+Vervolgens hebben we dezelfde density ratio procedure ook toegepast op een multivariaat voorbeeld, waarin we een data set met 8 variabelen hebben gesynthetiseerd. 
+Hierbij hebben we de synthesis modellen stapsgewijs verbeterd, en hebben we gekeken of deze verbeteringen werden opgepikt door de density ratio schattingen.
+En dan in het bijzonder de Pearson divergence zoals hierboven beschreven.
+Laten we beginnen met de categorische variabelen, deze zijn altijd met logistische of multinomiale logistische regressie geschat. Dit werkte best wel goed, dus hier hebben we niets aan verbeterd. 
+Voor de continue variabelen zijn we begonnen met een simpel lineair model, en deze hebben we stapsgewijs verbeterd, eerst door de variabelen te transformeren, en vervolgens door een puntmassa op de waarde 0 apart te simuleren, voordat de rest van de data gesynthetiseerd werd middels een lineair model.
+:::
+
+## Synthetic data (graphically)
+
+![](files/syn-vars.png)
+
+## Utility of the synthetic data
+
+![](files/syn-PEs.png)
+
+## Additional benefits of density ratios as utility measures
+
+- Automatic cross-validation for parameter specification
+
+- Extensions to high-dimensional data
+
+- Detecting synthetic "outliers"
+
+- __Reweighting__
+
+# Reweighting synthetic data
+
+$$\begin{aligned} 
+r(x) &= \frac{p_{syn}(x)}{p_{obs}(x)} \\
+p_{obs}(x) &= \frac{p_{syn}(x)}{r(x)} \\
+\end{aligned}$$
+
+## Reweighting synthetic data: the mean
+
+```{r}
+set.seed(21)
+```
+
+```{r}
+#| echo: true
+#| message: false
+#| results: false
+xobs <- rnorm(200, 1)
+xsyn <- rnorm(200, 1.2)
+
+fit <- ulsif(xobs, xsyn)
+w   <- predict(fit, xsyn)
+```
+
+```{r}
+ggplot() +
+  geom_point(aes(x = xsyn, y = w), col = "darkblue") +
+  theme_minimal() +
+  labs(y = "Weights")
+```
+
+
+## Reweighting synthetic data: the mean
+
+```{r}
+dens <- density(xsyn)
+pred_dens <- densityratio:::predict.density(dens, newdata = xsyn)
+
+data.frame(xsyn = xsyn,
+           y = pred_dens,
+           w = w
+) |>
+  ggplot(aes(x = xsyn, y = y, alpha = w)) +
+  geom_point(col = "darkblue") +
+  theme_minimal() +
+  labs(y = "Density")
+```
+
+- $\mu_{obs} = `r round(mean(xobs), 2)`$, $\mu_{syn} = `r round(mean(xsyn), 2)`$, $\mu_{wgt} = `r round(mean(xsyn*w), 2)`$. 
+
+## Reweighting synthetic data: regression coefficients
+
+```{r}
+#| echo: true
+xobs <- rnorm(1000, 0, 1)
+yobs <- 0.5 * xobs + rnorm(1000, 0, sqrt(1-0.5^2))
+xsyn <- rnorm(1000, 0, 1)
+ysyn <- rnorm(1000, 0, 1)
+
+fit <- ulsif(cbind(x = xobs, y = yobs), cbind(x = xsyn, y = ysyn))
+w   <- predict(fit, cbind(x = xsyn, y = ysyn))
+```
+
+## 
+```{r}
+library(patchwork)
+ggplot() +
+  geom_point(aes(x = xobs, y = yobs), alpha = 0.3) +
+  theme_minimal() +
+ggplot() +
+  geom_point(aes(x = xsyn, y = ysyn, col = w), alpha = 0.5) +
+  theme_minimal() +
+  scale_color_viridis_c()
+```
+
+
+## Reweighting synthetic data: regression coefficients
+
+```{r}
+#| echo: true
+fit_obs <- lm(yobs ~ xobs)
+fit_syn <- lm(ysyn ~ xsyn)
+fit_wgt <- lm(ysyn ~ xsyn, weights = w)
+```
+
+```{r}
+matrix(c(coef(fit_obs), coef(fit_syn), coef(fit_wgt)), 2,
+       dimnames = list(c("b0", "b1"), c("obs", "syn", "wgt"))) |>
+  t() |>
+  data.frame()
+```
+
+## Reweighting synthetic data: regression coefficients
+
+```{r}
+#| echo: true
+xsyn <- runif(1000, -1, 4)
+ysyn <- runif(1000, -1, 4)
+
+fit <- ulsif(cbind(x = xobs, y = yobs), cbind(x = xsyn, y = ysyn))
+w   <- predict(fit, cbind(x = xsyn, y = ysyn))
+```
+
+## 
+
+```{r}
+ggplot() +
+  geom_point(aes(x = xobs, y = yobs), alpha = 0.3) +
+  theme_minimal() +
+ggplot() +
+  geom_point(aes(x = xsyn, y = ysyn, col = w), alpha = 0.5) +
+  theme_minimal() +
+  scale_color_viridis_c()
+```
+
+## Reweighting synthetic data: regression coefficients
+
+
+```{r}
+#| echo: true
+fit_obs <- lm(yobs ~ xobs)
+fit_syn <- lm(ysyn ~ xsyn)
+fit_wgt <- lm(ysyn ~ xsyn, weights = pmax(0,w))
+```
+
+```{r}
+matrix(c(coef(fit_obs), coef(fit_syn), coef(fit_wgt)), 2,
+       dimnames = list(c("b0", "b1"), c("obs", "syn", "wgt"))) |>
+  t() |>
+  data.frame()
+```
+
+
+## Open questions?
+
+How good does this reweighting work? When does it not work?
+
+<br>
+
+Can we use this reweighting for inferences?
+
+<br>
+
+If so, how can we calculate the variances?
+
+## Downsides of the density ratio approach
+
+Applicability to categorical data must be investigated
+
+<br>
+
+In the examples above, categorical data was simply transformed to numeric data (four categories --> 1, 2, 3, 4)
+
+<br>
+
+Privacy risks of density ratios
+
+
+
+
+# Thanks
+
+Questions?
+
+<br>
+<br>
+
+Later questions?
+
+- [t.b.volker@uu.nl](mailto:t.b.volker@uu.nl)
